@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto px-4 py-10">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-10">Smart Parking Dashboard</h1>
+        
+        <!-- Status Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+            <div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+                <h2 class="text-lg font-semibold text-gray-600 mb-2">Current Status</h2>
+                <p id="parkingStatus" class="text-2xl font-bold text-green-500">Loading...</p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+                <h2 class="text-lg font-semibold text-gray-600 mb-2">Vehicles Today</h2>
+                <p id="vehiclesParked" class="text-2xl font-bold text-blue-500">Loading...</p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+                <h2 class="text-lg font-semibold text-gray-600 mb-2">Total Earnings</h2>
+                <p id="totalEarnings" class="text-2xl font-bold text-purple-500">Loading...</p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow flex items-center justify-center">
+                <button onclick="updateDashboard()" class="px-4 py-2 bg-indigo-600 text-white rounded-md font-semibold hover:bg-indigo-700 transition-colors">
+                    Refresh Data
+                </button>
+            </div>
+        </div>
+        
+        <!-- Current Vehicle Info -->
+        <div id="currentVehicleInfo" class="bg-white rounded-lg shadow-md p-6 mb-10 hidden hover:shadow-lg transition-shadow">
+            <h2 class="text-lg font-semibold text-gray-600 mb-4">Current Vehicle Information</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <p class="text-sm text-gray-500">Duration</p>
+                    <p id="currentDuration" class="text-xl font-bold text-gray-700">Loading...</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500">Current Fee</p>
+                    <p id="currentFee" class="text-xl font-bold text-gray-700">Loading...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Occupancy Rate Chart -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-10 hover:shadow-lg transition-shadow">
+            <h2 class="text-lg font-semibold text-gray-600 mb-4">Daily Occupancy Rate</h2>
+            <canvas id="occupancyChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const ESP_IP = '192.168.1.115'; // Replace with your ESP8266's IP address
+        let occupancyChart;
+
+        async function updateDashboard() {
+            try {
+                const response = await fetch(`http://${ESP_IP}/status`);
+                const data = await response.json();
+
+                // Update status
+                const statusElement = document.getElementById('parkingStatus');
+                statusElement.textContent = data.isOccupied ? 'OCCUPIED' : 'AVAILABLE';
+                statusElement.className = data.isOccupied ? 
+                    'text-2xl font-bold text-red-500' : 
+                    'text-2xl font-bold text-green-500';
+
+                // Update counts
+                document.getElementById('vehiclesParked').textContent = data.vehiclesParked;
+                document.getElementById('totalEarnings').textContent = `$${data.totalEarnings.toFixed(2)}`;
+
+                // Update current vehicle info
+                const currentVehicleInfo = document.getElementById('currentVehicleInfo');
+                if (data.isOccupied) {
+                    currentVehicleInfo.classList.remove('hidden');
+                    document.getElementById('currentDuration').textContent = `${data.currentDuration} minutes`;
+                    document.getElementById('currentFee').textContent = `$${data.currentFee.toFixed(2)}`;
+                } else {
+                    currentVehicleInfo.classList.add('hidden');
+                }
+
+                // Update chart with occupancy data
+                if (occupancyChart) {
+                    occupancyChart.data.labels = data.occupancyData.labels;
+                    occupancyChart.data.datasets[0].data = data.occupancyData.values;
+                    occupancyChart.update();
+                }
+            } catch (error) {
+                console.error('Error fetching parking data:', error);
+            }
+        }
+
+        // Initialize Chart.js
+        function initializeOccupancyChart() {
+            const ctx = document.getElementById('occupancyChart').getContext('2d');
+            occupancyChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [], // Will be updated dynamically
+                    datasets: [{
+                        label: 'Occupancy Rate (%)',
+                        data: [],
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'Occupancy (%)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize the dashboard
+        window.onload = function() {
+            initializeOccupancyChart();
+            updateDashboard();
+            setInterval(updateDashboard, 2000); // Automatic update every 2 seconds
+        };
+    </script>
+</body>
+</html>
